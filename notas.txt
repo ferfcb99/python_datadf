@@ -1,0 +1,359 @@
+#BLOQUE 10. Separar train y test
+#Usaremos primero el modelo operativo
+
+# =========================================
+# BLOQUE 10: TRAIN / TEST SPLIT
+# =========================================
+
+# Elige aquí qué conjunto de variables quieres usar:
+features = features_operativas
+# features = features_explicativas
+
+target = "TARGET_CONSUMADA"
+
+X = df_model[features].copy()
+y = df_model[target].copy()
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y,
+    test_size=0.30,
+    random_state=42,
+    stratify=y
+)
+
+print("Variables seleccionadas:")
+print(features)
+
+print("\nDimensiones:")
+print("X_train:", X_train.shape)
+print("X_test :", X_test.shape)
+print("y_train:", y_train.shape)
+print("y_test :", y_test.shape)
+
+print("\nDistribución del target en train:")
+print(y_train.value_counts())
+print(y_train.value_counts(normalize=True).round(4))
+
+print("\nDistribución del target en test:")
+print(y_test.value_counts())
+print(y_test.value_counts(normalize=True).round(4))
+
+--------------------------------
+
+#BLOQUE 11. Definir variables categóricas y numéricas + pipeline
+#Este bloque prepara el preprocesamiento correcto
+# =========================================
+# BLOQUE 11: PREPROCESAMIENTO PARA MODELOS
+# =========================================
+
+# Detectar automáticamente qué variables son categóricas y cuáles numéricas
+categoricas = X_train.select_dtypes(include=["object"]).columns.tolist()
+numericas = X_train.select_dtypes(include=["int64", "float64"]).columns.tolist()
+
+print("Variables categóricas:")
+print(categoricas)
+
+print("\nVariables numéricas:")
+print(numericas)
+
+preprocesador = ColumnTransformer(
+    transformers=[
+        ("cat", Pipeline(steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore"))
+        ]), categoricas),
+        ("num", Pipeline(steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent"))
+        ]), numericas)
+    ],
+    remainder="drop"
+)
+
+print("\nPreprocesador listo.")
+
+------------------------------------------------
+
+
+# =========================================
+# BLOQUE 11.1: FUNCIÓN GENERAL DE EVALUACIÓN
+# =========================================
+
+def evaluar_modelo(modelo, X_test, y_test, nombre_modelo="Modelo"):
+    # Predicciones
+    y_pred = modelo.predict(X_test)
+
+    # Probabilidades, si el modelo las soporta
+    y_prob = None
+    if hasattr(modelo, "predict_proba"):
+        y_prob = modelo.predict_proba(X_test)[:, 1]
+
+    # Reporte de clasificación como diccionario
+    reporte_dict = classification_report(y_test, y_pred, output_dict=True)
+    tabla_metricas = pd.DataFrame(reporte_dict).T.round(4)
+
+    # Métricas globales
+    metricas_globales = {
+        "accuracy": accuracy_score(y_test, y_pred),
+        "balanced_accuracy": balanced_accuracy_score(y_test, y_pred)
+    }
+
+    if y_prob is not None:
+        metricas_globales["roc_auc"] = roc_auc_score(y_test, y_prob)
+        metricas_globales["average_precision"] = average_precision_score(y_test, y_prob)
+
+    tabla_global = pd.DataFrame(
+        list(metricas_globales.items()),
+        columns=["metrica", "valor"]
+    ).round(4)
+
+    # Mostrar tablas
+    print(f"\n=== {nombre_modelo.upper()} ===")
+    print("\nTabla de métricas por clase:")
+    display(tabla_metricas)
+
+    print("\nMétricas globales:")
+    display(tabla_global)
+
+    # Matriz de confusión
+    cm = confusion_matrix(y_test, y_pred)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+    disp.plot()
+    plt.title(f"Matriz de confusión - {nombre_modelo}")
+    plt.show()
+
+    # Curva ROC
+    if y_prob is not None:
+        fpr, tpr, _ = roc_curve(y_test, y_prob)
+
+        plt.figure(figsize=(6, 5))
+        plt.plot(fpr, tpr, label=f"AUC = {roc_auc_score(y_test, y_prob):.4f}")
+        plt.plot([0, 1], [0, 1], linestyle="--")
+        plt.xlabel("False Positive Rate")
+        plt.ylabel("True Positive Rate")
+        plt.title(f"Curva ROC - {nombre_modelo}")
+        plt.legend()
+        plt.show()
+
+        # Curva Precision-Recall
+        precision, recall, _ = precision_recall_curve(y_test, y_prob)
+
+        plt.figure(figsize=(6, 5))
+        plt.plot(recall, precision, label=f"AP = {average_precision_score(y_test, y_prob):.4f}")
+        plt.xlabel("Recall")
+        plt.ylabel("Precision")
+        plt.title(f"Curva Precision-Recall - {nombre_modelo}")
+        plt.legend()
+        plt.show()
+
+    return y_pred, y_prob, tabla_metricas, tabla_global
+
+--------------------------------------------
+
+#BLOQUE 12. Entrenar Árbol de Decisión
+#Primer modelo de clasificación
+
+# # =========================================
+# BLOQUE 12: ÁRBOL DE DECISIÓN
+# =========================================
+
+modelo_arbol = Pipeline(steps=[
+    ("preprocesador", preprocesador),
+    ("clasificador", DecisionTreeClassifier(
+        max_depth=5,
+        min_samples_leaf=10,
+        class_weight="balanced",
+        random_state=42
+    ))
+])
+
+modelo_arbol.fit(X_train, y_train)
+
+pred_arbol, prob_arbol, tabla_metricas_arbol, tabla_global_arbol = evaluar_modelo(
+    modelo_arbol,
+    X_test,
+    y_test,
+    nombre_modelo="Árbol de decisión"
+)
+
+------------------------------------------------
+
+#BLOQUE 12.1. Matriz de confusión del árbol
+
+cm = confusion_matrix(y_test, pred_arbol)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+disp.plot()
+plt.title("Matriz de confusión - Árbol de decisión")
+plt.show()
+
+df_resultados_arbol = X_test.copy()
+df_resultados_arbol["y_real"] = y_test.values
+df_resultados_arbol["y_pred"] = pred_arbol
+df_resultados_arbol["prob_consumada"] = prob_arbol
+
+df_resultados_arbol.sort_values("prob_consumada", ascending=False).head(20)
+
+----------------------------------------------------
+
+#BLOQUE 12.2. Ver probabilidades del árbol
+#Esto ayuda mucho para interpretar confianza del modelo
+prob_arbol = modelo_arbol.predict_proba(X_test)[:, 1]
+
+df_resultados_arbol = X_test.copy()
+df_resultados_arbol["y_real"] = y_test.values
+df_resultados_arbol["y_pred"] = pred_arbol
+df_resultados_arbol["prob_consumada"] = prob_arbol
+
+df_resultados_arbol.head(10)
+
+
+-------------------------------------------------
+
+#BLOQUE 12.3. Casos que el árbol ve con mayor riesgo de consumación
+
+df_resultados_arbol.sort_values("prob_consumada", ascending=False).head(20)
+
+-------------------------------------------------------
+
+
+#BLOQUE 13. Visualizar el árbol
+#Para interpretar las reglas del modelo
+
+
+# =========================================
+# BLOQUE 13: VISUALIZAR EL ÁRBOL
+# =========================================
+
+ohe = modelo_arbol.named_steps["preprocesador"].named_transformers_["cat"].named_steps["onehot"]
+nombres_cat = ohe.get_feature_names_out(categoricas)
+nombres_finales = list(nombres_cat) + numericas
+
+arbol = modelo_arbol.named_steps["clasificador"]
+
+plt.figure(figsize=(24, 12))
+plot_tree(
+    arbol,
+    feature_names=nombres_finales,
+    class_names=["EVITADA", "CONSUMADA"],
+    filled=True,
+    rounded=True,
+    fontsize=8
+)
+plt.title("Árbol de decisión")
+plt.show()
+
+# =========================================
+# BLOQUE 13: VISUALIZAR EL ÁRBOL
+# =========================================
+
+ohe = modelo_arbol.named_steps["preprocesador"].named_transformers_["cat"].named_steps["onehot"]
+nombres_cat = ohe.get_feature_names_out(categoricas)
+nombres_finales = list(nombres_cat) + numericas
+
+arbol = modelo_arbol.named_steps["clasificador"]
+
+plt.figure(figsize=(24, 12))
+plot_tree(
+    arbol,
+    feature_names=nombres_finales,
+    class_names=["EVITADA", "CONSUMADA"],
+    filled=True,
+    rounded=True,
+    fontsize=8
+)
+plt.title("Árbol de decisión")
+plt.show()
+
+#BLOQUE 13.1. Importancia de variables del árbol
+importancias_arbol = pd.DataFrame({
+    "variable": nombres_finales,
+    "importancia": arbol.feature_importances_
+}).sort_values("importancia", ascending=False)
+
+display(importancias_arbol.head(20))
+
+# =========================================
+# BLOQUE 14: RANDOM FOREST
+# =========================================
+
+modelo_rf = Pipeline(steps=[
+    ("preprocesador", preprocesador),
+    ("clasificador", RandomForestClassifier(
+        n_estimators=300,
+        max_depth=8,
+        min_samples_leaf=5,
+        class_weight="balanced",
+        random_state=42
+    ))
+])
+
+modelo_rf.fit(X_train, y_train)
+
+pred_rf, prob_rf, tabla_metricas_rf, tabla_global_rf = evaluar_modelo(
+    modelo_rf,
+    X_test,
+    y_test,
+    nombre_modelo="Random Forest"
+)
+
+
+
+#BLOQUE 14.1. Casos con mayor probabilidad según Random Forest
+
+df_resultados_rf = X_test.copy()
+df_resultados_rf["y_real"] = y_test.values
+df_resultados_rf["y_pred"] = pred_rf
+df_resultados_rf["prob_consumada"] = prob_rf
+
+df_resultados_rf.sort_values("prob_consumada", ascending=False).head(20)
+
+
+#BLOQUE 15. Importancia de variables del Random Forest
+
+
+ohe_rf = modelo_rf.named_steps["preprocesador"].named_transformers_["cat"].named_steps["onehot"]
+nombres_cat_rf = ohe_rf.get_feature_names_out(categoricas)
+nombres_finales_rf = list(nombres_cat_rf) + numericas
+
+rf = modelo_rf.named_steps["clasificador"]
+
+importancias_rf = pd.DataFrame({
+    "variable": nombres_finales_rf,
+    "importancia": rf.feature_importances_
+}).sort_values("importancia", ascending=False)
+
+display(importancias_rf.head(20))
+
+
+importancias_rf.head(15).plot(
+    x="variable",
+    y="importancia",
+    kind="bar",
+    figsize=(12, 5)
+)
+plt.title("Top 15 variables más importantes - Random Forest")
+plt.ylabel("Importancia")
+plt.xticks(rotation=75)
+plt.show()
+
+
+-
+
+
+#BLOQUE 15.1. Comparar árbol vs random forest
+#Este bloque te ayuda a ver cuál se comporta mejor.
+
+
+comparacion_global = pd.concat(
+    [
+        tabla_global_arbol.assign(modelo="Arbol"),
+        tabla_global_rf.assign(modelo="RandomForest")
+    ],
+    ignore_index=True
+)
+
+comparacion_global = comparacion_global[["modelo", "metrica", "valor"]]
+display(comparacion_global)
+
+
+
+
