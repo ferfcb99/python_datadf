@@ -1,0 +1,111 @@
+📊 Interpretación de Resultados Generados
+BLOQUE 10 - Train/Test Split
+Se descartó 1 registro con valores faltantes
+65 estudiantes fueron usados para el análisis
+Split 70/30: 45 registros para entrenar, 20 para probar
+Interpretación: La distribución del target está balanceada en train y test:
+
+MEDIANAMENTE DEPENDIENTE: ~57-60% (mayoritaria)
+POCO DEPENDIENTE: ~25-28%
+ALTAMENTE DEPENDIENTE: ~13-15%
+Esto es realista: la mayoría de estudiantes tienen dependencia media de IA.
+
+BLOQUE 11 - Variables Detectadas
+TODAS las variables son categóricas (texto): carrera, semestre, edad, frecuencia de uso, etc.
+El preprocesador aplicará OneHotEncoding (convertir categorías en números binarios)
+Interpretación: Los datos son puramente categóricos, no hay métricas continuas. Esto es normal para encuestas.
+
+BLOQUE 12 - Árbol de Decisión (Resultados Clave)
+Métricas por clase:
+
+Clase	Precision	Recall	F1-Score
+ALTAMENTE DEPENDIENTE	0.17	0.33	0.22
+MEDIANAMENTE DEPENDIENTE	0.00	0.00	0.00
+POCO DEPENDIENTE	0.36	1.00	0.53
+Cómo interpretar:
+
+Recall 1.0 en POCO DEPENDIENTE ✅
+
+El modelo captura el 100% de estudiantes poco dependientes
+No hay falsos negativos en esta clase
+Precision 0.0 en MEDIANAMENTE DEPENDIENTE ⚠️
+
+El modelo NO predice esta clase (nunca dice "medianamente dependiente")
+El árbol está siendo demasiado conservador o enfocado en otra clase
+Accuracy 0.30 (bajo) ❌
+
+Solo predice correctamente el 30% de los casos
+Pero Balanced Accuracy = 0.44 (mejor en promedio por clase)
+ROC-AUC 0.67 📈
+
+Score moderado (rango 0.5-1.0)
+Indica que el modelo discrimina mejor que al azar
+🎯 ¿Qué significa esto en términos prácticos?
+✅ Lo bueno:
+
+El modelo identifica bien a estudiantes POCO dependientes
+Mejor que predecir al azar (AUC > 0.5)
+⚠️ Lo problemático:
+
+Dataset pequeño (65 estudiantes) → modelos poco robustos
+Desbalance de clases → el modelo se orienta a la clase mayoritaria
+No predice "MEDIANAMENTE DEPENDIENTE" (la clase más frecuente)
+💡 Recomendaciones de siguiente paso
+Ajustar hiperparámetros: Reducir max_depth, cambiar min_samples_leaf
+Balancear clases: Usar class_weight='balanced' (ya está)
+Probar Random Forest: Modelos de ensamble suelen funcionar mejor
+Aumentar datos: 65 registros es muy poco para ML robusta
+
+✅ BLOQUE 12.1 implementado y probado correctamente
+
+📊 INTERPRETACIÓN DE LA MATRIZ DE CONFUSIÓN
+La matriz de confusión muestra cómo el modelo predice vs. la realidad. Ejes:
+
+Filas (eje Y - "True label"): Valores REALES de los estudiantes
+Columnas (eje X - "Predicted label"): Lo que el modelo PREDIJO
+Números en celdas: Cantidad de estudiantes
+
+🎯 Conclusión del BLOQUE 12.1:
+✅ Fortaleza: Predice bien ALTO dependencia (5/5 = 100%)
+❌ Debilidad: No aprende clase MEDIANO (0/12 = 0%)
+⚠️ Causa: Dataset muy pequeño (65 registros) + desbalance de clases
+
+📊 INTERPRETACIÓN DE LAS PROBABILIDADES MULTICLASE
+El árbol genera 3 probabilidades para cada estudiante (una por clase). Deben sumar 1.0:
+
+POCO DEPENDIENTE (prob_poco)
+├─ Promedio: 27%  ← Baja confianza en esta clase
+├─ Min: 0%        ← A veces el árbol descarta completamente
+└─ Max: 64%       ← En algunos casos la predice
+
+MEDIANAMENTE DEPENDIENTE (prob_mediano)  ⚠️ PROBLEMA
+├─ Promedio: 33%  (¡siempre muy similar!)
+├─ Min: 29%       ← Casi nunca baja
+├─ Max: 37%       ← Casi nunca sube
+└─ Std: 0.04      ← Variación MÍNIMA (debería ser >0.15)
+
+ALTAMENTE DEPENDIENTE (prob_alto)
+├─ Promedio: 40%  ← Más confianza
+├─ Min: 0%
+└─ Max: 71%       ← Rango más amplio
+
+
+⚠️ Hallazgos críticos:
+1. El modelo NO aprende "MEDIANAMENTE"
+Las probabilidades de MEDIANO son casi idénticas (29%-37%)
+Desviación estándar: 0.04 (muy baja)
+Interpretación: El árbol asigna la misma probabilidad a casi todos los casos
+Causa: La clase MEDIANO tiene solo 12 ejemplos en training (muy pocos)
+2. Baja confianza general
+Todas las probabilidades están en rango 27%-40%
+Idealmente deberían ser >70% para predicciones confiables
+Interpretación: El modelo es indeciso, no está seguro
+3. Distribución con cola larga
+Las columnas POCO y ALTO tienen max de 64% y 71%
+MEDIANO nunca supera 37%
+Interpretación: El modelo tiene más "confianza relativa" en POCO y ALTO
+
+
+
+
+Necesito que analices el archivo USOIA_PARTE2 ya que te pedire algunas adecuaciones despues del analisis y te pasare ejemplos de un proyecto (solo tomarlo como base ya que los datos son completamente diferentes).
